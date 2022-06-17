@@ -104,4 +104,9 @@ dist
 .tern-port
 
 # output
-dist
+dist/
+
+temp
+
+.vscode/
+.metals/

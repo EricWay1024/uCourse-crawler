@@ -1,17 +1,15 @@
 const puppeteer = require("puppeteer");
 const consola = require("consola");
 const prompts = require("prompts");
-const mongoose = require("mongoose");
 const fs = require("fs-extra");
+const { Cluster } = require('puppeteer-cluster');
+require('dotenv').config();
 
 const CONFIGS = {
   campus: undefined,
   campus_code: undefined,
   year: undefined,
   year_code: undefined,
-  outputMethods: [],
-  mongoUri: undefined,
-  Model: undefined,
   browser: {
     headless: true,
     // slowMo: 50,
@@ -19,98 +17,25 @@ const CONFIGS = {
   },
 };
 
-const selectOutputMethods = async () => {
-  const { value } = await prompts({
-    type: "multiselect",
-    name: "value",
-    message: "Pick output methods",
-    choices: [
-      { title: "MongoDB", value: "mongo" },
-      { title: "Local JSON File", value: "local" },
-    ],
-    hint: "- Space to select. Return to submit",
-    instructions: false,
-    min: 1,
-  });
-  CONFIGS.outputMethods = value;
-};
-
-const connectDB = async () => {
-  if (!CONFIGS.outputMethods.includes("mongo")) return;
-  const { value } = await prompts({
-    type: "text",
-    name: "value",
-    message: "Input your mongoDB URI",
-  });
-  CONFIGS.mongoUri = value;
-  await mongoose.connect(CONFIGS.mongoUri, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-  });
-  consola.success("mongoose connected");
-};
-
-const getTableName = () => `Course_${CONFIGS.campus}_${CONFIGS.year}`;
-
-const initMongoModel = () => {
-  const Course = mongoose.model(getTableName(), {
-    code: String,
-    title: String,
-    credits: Number,
-    level: Number,
-    summary: String,
-    aims: String,
-    offering: String,
-    convenor: [{ name: String }],
-    semester: String, // semesters?
-    requisites: String,
-    outcome: String,
-    class: [
-      {
-        activity: String,
-        numOfWeeks: String,
-        numOfSessions: String,
-        sessionDuration: String,
-      },
-    ],
-    assessment: [
-      {
-        type: { type: String }, // thank you mongoose
-        weight: String,
-        requirements: String,
-      },
-    ],
-    belongsTo: {
-      code: String,
-      name: String,
-    },
-  });
-  return Course;
-};
-
 const initBrowser = async () => {
   const browser = await puppeteer.launch(CONFIGS.browser);
   const page = await browser.newPage();
-
-  consola.start("Starting the browser");
-  await page.emulate({
-    userAgent:
-      "Mozilla/5.0 (PlayBook; U; RIM Tablet OS 2.1.0; en-US) AppleWebKit/536.2+ (KHTML like Gecko) Version/7.2.1.0 Safari/536.2+",
-    viewport: {
-      width: 600,
-      height: 8000,
-      isMobile: true,
-      hasTouch: true,
-    },
-  });
   consola.ready("Browser is ready");
-
   return { browser, page };
 };
 
+const login = async (page) => {
+    // Login
+    consola.log("Login...");
+    await page.waitForSelector('#userid');
+    await page.$eval('#userid', (el, v) => el.value = v, process.env.USER_ID);
+    await page.$eval('#pwd', (el, v) => el.value = v, process.env.USER_PASSWORD);
+    await page.click('[name=Submit]');
+}
+
 const preSearch = async (page) => {
   // Home Page
-  consola.log("Clicking 'Search for Courses' button...");
+  // consola.log("Clicking 'Search for Courses' button...");
   await page.waitForSelector("#UN_PAM_EXTR_WRK_UN_MODULE_PB");
   await page.click("#UN_PAM_EXTR_WRK_UN_MODULE_PB");
   await page.waitForSelector("#UN_PAM_EXTR_WRK_CAMPUS");
@@ -118,7 +43,6 @@ const preSearch = async (page) => {
   // Search Page
   // select campus
   if (!CONFIGS.campus) {
-    consola.log("Selecting a campus...");
     const campuses = await page.evaluate(() =>
       [...document.querySelectorAll('[id="UN_PAM_EXTR_WRK_CAMPUS"] > option')]
         .filter((el) => el.value)
@@ -141,9 +65,7 @@ const preSearch = async (page) => {
   await page.select("#UN_PAM_EXTR_WRK_CAMPUS", CONFIGS.campus_code);
 
   // select year
-  consola.log("Waiting for academic year data...");
   await page.waitForSelector(`#UN_PAM_EXTR_WRK_STRM > option[value="3200"]`);
-  consola.success("Year data loaded");
 
   if (!CONFIGS.year) {
     consola.log(`Selecting an academic year'...`);
@@ -170,7 +92,6 @@ const preSearch = async (page) => {
 };
 
 const getSchools = async (page) => {
-  consola.log("Get schools data...");
   const schools = await page.evaluate(() =>
     [
       ...document.querySelectorAll(
@@ -183,7 +104,6 @@ const getSchools = async (page) => {
         name: el.innerText,
       }))
   );
-  consola.success("Schools data obtained");
   return schools;
 };
 
@@ -220,65 +140,64 @@ const getCourses = async (page) => {
   return courses;
 };
 
-const upload = async (row) => {
-  if (CONFIGS.outputMethods.includes("mongo")) {
-    if (!CONFIGS.Model) {
-      CONFIGS.Model = initMongoModel();
-    }
-    const { Model } = CONFIGS;
-    const instance = new Model(row);
-    await instance.save();
-  }
-
-  if (CONFIGS.outputMethods.includes("local")) {
-    const tableName = getTableName();
-    const fileName = `./dist/${tableName}.json`;
-    let json = { data: [] };
-    try {
-      json = fs.readJSONSync(fileName);
-    } catch (e) {
-      // no file;
-      consola.log("Create a new JSON file.");
-    }
-    json.data.push(row);
-    fs.outputJsonSync(fileName, json, { spaces: 2 });
-  }
-};
-
 const close = async () => {
   process.exit();
 };
 
+const init = async (page) => {
+  await page.emulate({
+    userAgent:
+      "Mozilla/5.0 (PlayBook; U; RIM Tablet OS 2.1.0; en-US) AppleWebKit/536.2+ (KHTML like Gecko) Version/7.2.1.0 Safari/536.2+",
+    viewport: {
+      width: 600,
+      height: 8000,
+      isMobile: true,
+      hasTouch: true,
+    },
+  });
+  await page.goto(
+    "https://mynottingham.nottingham.ac.uk/psp/psprd/EMPLOYEE/HRMS/c/UN_PROG_AND_MOD_EXTRACT.UN_PAM_CRSE_EXTRCT.GBL?"
+  );
+  await page.goto(
+    "https://campus.nottingham.ac.uk/psc/csprd/EMPLOYEE/HRMS/c/UN_PROG_AND_MOD_EXTRACT.UN_PAM_CRSE_EXTRCT.GBL?%252fningbo%252fasp%252fmoduledetails.asp"
+  );
+  await login(page);
+  await preSearch(page);
+}
+
+
 const main = async () => {
   try {
-    await selectOutputMethods();
-
-    await connectDB();
-
     const { browser, page } = await initBrowser();
-
-    await page.goto(
-      "https://mynottingham.nottingham.ac.uk/psp/psprd/EMPLOYEE/HRMS/c/UN_PROG_AND_MOD_EXTRACT.UN_PAM_CRSE_EXTRCT.GBL?"
-    );
-    await page.goto(
-      "https://campus.nottingham.ac.uk/psc/csprd/EMPLOYEE/HRMS/c/UN_PROG_AND_MOD_EXTRACT.UN_PAM_CRSE_EXTRCT.GBL?%252fningbo%252fasp%252fmoduledetails.asp"
-    );
-
-    await preSearch(page);
+    
+    await init(page);
     consola.success("Config Selected! GO GO GO! 🚀🚀🚀");
-
     const schools = await getSchools(page);
+    const results = [];
 
-    consola.log("Traversing...");
-    for (let i = 0; i < schools.length; i++) {
+    const cluster = await Cluster.launch({
+      concurrency: Cluster.CONCURRENCY_CONTEXT,
+      maxConcurrency: 15,
+      puppeteerOptions: CONFIGS.browser,
+      timeout: 1 << 30,
+    });
+    
+    await cluster.task(async ({ page, data }) => {
+      const { i } = data;
+      await page.reload();
+      await init(page);
+        
       const school = schools[i];
+      const schoolResults = [];
+
+      if (school.name === "United Kingdom") {
+        return schoolResults; 
+      }
 
       consola.start(`School <${school.name}> [${i + 1}/${schools.length}]`);
       await searchSchool(page, school.code);
 
       if ((await page.$("win0divUN_PAM_EXTR_WRK_HTMLAREA8")) !== null) {
-        consola.info("No courses");
-        consola.log("Backing to search page");
         await page.click("UN_PAM_EXTR_WRK_UN_MODULE_PB");
         await page.waitForSelector("#UN_PAM_EXTR_WRK_CAMPUS");
       } else {
@@ -290,73 +209,110 @@ const main = async () => {
           const course = courses[j];
 
           consola.start(
-            `\n> Course <${course.title}> [${j + 1}/${
-              courses.length
-            }] in \n> School <${school.name}> [${i + 1}/${schools.length}]`
+            `> Course <${course.title}> [${j + 1}/${courses.length}]`
           );
 
-          await page.click(`[id="CRSE_CODE$${j}"]`, {
-            button: "middle",
-            // delay: 100,
-          });
-
           // await page.waitFor(10000)
-          await page.waitForSelector('[id="UN_PAM_CRSE_DTL_SUBJECT_DESCR$0"]');
+          try {
+            const courseSelector = `[id="CRSE_CODE$${j}"]`;
+            await page.waitForSelector(courseSelector);
+            await page.click(courseSelector, { button: "middle" });
+            await page.waitForSelector('[id="UN_PAM_CRSE_DTL_SUBJECT_DESCR$0"]');
+          } catch (e) {
+            // simply retry this course!
+            j--;
+            await page.reload();
+            await preSearch(page);
+            await searchSchool(page, school.code);
+            continue;
+          }
           // await page.screenshot({path: `l${j}.png`});
 
-          const result = await page.evaluate((belongsTo) => {
-            const gE = (id) => document.getElementById(id)?.innerHTML?.trim();
-            const gT = (id) =>
-              [
-                ...document.querySelectorAll(`[id="${id}"] > tbody > tr`),
-              ].filter((el) => el.id);
+          try {
+            const result = await page.evaluate((belongsTo) => {
+              const gE = (id) => document.getElementById(id)?.innerHTML?.trim();
+              const gT = (id) =>
+                [
+                  ...document.querySelectorAll(`[id="${id}"] > tbody > tr`),
+                ].filter((el) => el.id);
+  
+              return {
+                code: gE("UN_PAM_CRSE_DTL_SUBJECT_DESCR$0"),
+                title: gE("UN_PAM_CRSE_DTL_COURSE_TITLE_LONG$0"),
+                credits: Number(gE("UN_PAM_CRSE_DTL_UNITS_MINIMUM$0")),
+                level: Number(gE("UN_PAM_CRSE_DTL_UN_LEVELS$0")),
+                summary: gE("UN_PAM_CRSE_DTL_UN_SUMMARY_CONTENT$0"),
+                aims: gE("UN_PAM_CRSE_DTL_UN_AIMS$0"),
+                offering: gE("ACAD_ORG_TBL_DESCRFORMAL$0"),
+                convenor: gT("UN_PAM_CRS_CONV$scroll$0").map((_, k) => ({
+                  name: gE(`UN_PAM_CRS_CONV_NAME52$${k}`),
+                })),
+                semester: gE("SSR_CRSE_TYPOFF_DESCR$0"), // semesters?
+                requisites: gT("UN_PRECOREQ2_VW$scroll$0").map((_, k) => ({
+                  subject: gE(`PRE_CO_REQ_CRSE_CD$${k}`),
+                  courseTitle: gE(`UN_PRECOREQ2_VW_COURSE_TITLE_LONG$${k}`),
+                })),
+                additionalRequirements: gT("UN_MOD_ADDRQ_VW$scroll$0").map((_, k) => ({
+                  operator: gE(`CUSTM_OPER1$${k}`),
+                  condition: gE(`UN_PAM_EXTR_WRK_DESCRLONG$${k}`),
+                })),
+                outcome: document
+                  .getElementById('ACE_UN_QAA_CRSE_OUT$0')
+                  .outerHTML
+                  .match(/(?<!div)UN_QAA_CRSE_OUT_UN_LEARN_OUTCOME\$[0-9]+/g)
+                  .map((id) => gE(id))
+                  .join("\n"),
+                targetStudents: gE("UN_PAM_CRSE_DTL_UN_TARGET_STDNTS$0"),
+                assessmentPeriod: gE("UN_PAM_EXTR_WRK_UN_DESCRFORMAL$0"),
+                courseWebLinks: gT("UN_PAM_CRSE_WEB$scroll$0").map((_, k) => ({
+                  type: gE(`UN_PAM_CRSE_WEB_DESCR100$${k}`),
+                  link: gE(`UN_PAM_CRSE_WEB_UN_WEB_LINK_URL$${k}`),
+                })),
+                class: gT("UN_PAM_CRSE_FRQ$scroll$0").map((_, k) => ({
+                  activity: gE(`UN_PAM_CRSE_FRQ_SSR_COMPONENT$${k}`),
+                  numOfWeeks: gE(`UN_PAM_EXTR_WRK_UN_CRSE_DURATN_WKS$${k}`),
+                  numOfSessions: gE(`UN_PAM_EXTR_WRK_UN_CRSE_NUM_SESN$${k}`),
+                  sessionDuration: gE(`UN_PAM_EXTR_WRK_UN_CRSE_DURATN_SES$${k}`),
+                })),
+                assessment: gT("UN_QA_CRSE_ASAI$scroll$0").map((_, k) => ({
+                  type: gE(`UN_QA_CRSE_ASAI_DESCR50$${k}`),
+                  weight: gE(`UN_QA_CRSE_ASAI_SSR_CW_WEIGHT$${k}`),
+                  requirements: gE(`UN_QA_CRSE_ASAI_SSR_DESCRLONG$${k}`),
+                })),
+                belongsTo,
+              };
+            }, school)
+            schoolResults.push(result);
+          } catch (e) {
+            consola.error(`${school.name}, ${course.title}`);
+            consola.error(e);
+            continue;
+          }
 
-            return {
-              code: gE("UN_PAM_CRSE_DTL_SUBJECT_DESCR$0"),
-              title: gE("UN_PAM_CRSE_DTL_COURSE_TITLE_LONG$0"),
-              credits: Number(gE("UN_PAM_CRSE_DTL_UNITS_MINIMUM$0")),
-              level: Number(gE("UN_PAM_CRSE_DTL_UN_LEVELS$0")),
-              summary: gE("UN_PAM_CRSE_DTL_UN_SUMMARY_CONTENT$0"),
-              aims: gE("UN_PAM_CRSE_DTL_UN_AIMS$0"),
-              offering: gE("ACAD_ORG_TBL_DESCRFORMAL$0"),
-              convenor: gT("UN_PAM_CRS_CONV$scroll$0").map((_, k) => ({
-                name: gE(`UN_PAM_CRS_CONV_NAME52$${k}`),
-              })),
-              semester: gE("SSR_CRSE_TYPOFF_DESCR$0"), // semesters?
-              requisites: gE("UN_PAM_CRSE_WRK_UN_PRE_CO_REQ_GRP$0"),
-              outcome: gE("UN_QAA_CRSE_OUT_UN_LEARN_OUTCOME$0"),
-              class: gT("UN_PAM_CRSE_FRQ$scroll$0").map((_, k) => ({
-                activity: gE(`UN_PAM_CRSE_FRQ_SSR_COMPONENT$${k}`),
-                numOfWeeks: gE(`UN_PAM_EXTR_WRK_UN_CRSE_DURATN_WKS$${k}`),
-                numOfSessions: gE(`UN_PAM_EXTR_WRK_UN_CRSE_NUM_SESN$${k}`),
-                sessionDuration: gE(`UN_PAM_EXTR_WRK_UN_CRSE_DURATN_SES$${k}`),
-              })),
-              assessment: gT("UN_QA_CRSE_ASAI$scroll$0").map((_, k) => ({
-                type: gE(`UN_QA_CRSE_ASAI_DESCR50$${k}`),
-                weight: gE(`UN_QA_CRSE_ASAI_SSR_CW_WEIGHT$${k}`),
-                requirements: gE(`UN_QA_CRSE_ASAI_SSR_DESCRLONG$${k}`),
-              })),
-              belongsTo,
-            };
-          }, school);
-
-          consola.info("Uploading...");
-          await upload(result); // 👈
-          consola.success("Uploaded");
-
-          consola.success("Done");
-
-          consola.log("Reloading Page...");
+          // consola.log("Reloading Page...");
           await page.reload();
           await preSearch(page);
           await searchSchool(page, school.code);
         }
-        // 👆
-
-        await page.reload();
-        await preSearch(page);
       }
+
+      return schoolResults;
+    });
+
+    for (let i = 0; i < schools.length; i++) {
+      cluster.execute({ i }).then((schoolResults) => {
+        results.push(...schoolResults);
+      });
     }
+
+    await cluster.idle();
+    await cluster.close();
+
+    const json = JSON.stringify(results, null, 2);
+    // add time stamp to file name
+    const timeStamp = new Date().toISOString().replace(/:/g, "-");
+    fs.writeFileSync(`./dist/courseData-${timeStamp}.json`, json);
+    fs.writeFileSync(`./dist/courseData.json`, json);
 
     await browser.close();
     consola.success("All done! 👍👍👍");
