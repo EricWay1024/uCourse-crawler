@@ -80,5 +80,9 @@ The estimated output size will be 50~60 MB if both courses and plans are crawled
 
 ## Resources
 
-- Resouce website: <https://mynottingham.nottingham.ac.uk/psp/psprd/EMPLOYEE/HRMS/c/UN_PROG_AND_MOD_EXTRACT.UN_PAM_CRSE_EXTRCT.GBL>
+- Resouce website: <https://campus.nottingham.ac.uk/psp/csprd_pub/EMPLOYEE/HRMS/c/UN_PROG_AND_MOD_EXTRACT.UN_PAM_CRSE_EXTRCT.GBL>
+
+## Disclaimer
+
+University of Nottingham has the copyright of all the data on its website. This crawler is intended for general information purposes only.
 
