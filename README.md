@@ -1,38 +1,58 @@
 # uCourse-crawler
 🎒 Scrape the courses info from the University of Nottingham's website. (Different campuses and academic years supported.)
 
+This fork is modified to fit the needs of Nott Course: 
+
+- [EricWay1024/nott-course: React app of an unofficial enhancement of the course catalogue offered by University of Nottingham.](https://github.com/EricWay1024/nott-course)
+- [EricWay1024/nott-course-server-cpp: C++ Web Server for Nott Course, an unofficial enhancement of the course catalogue offered by University of Nottingham.](https://github.com/EricWay1024/nott-course-server-cpp)
+
+What have I done?
+
+- Included complete information of the course page;
+- Added the scraper for academic plans, with fully parsed plan structures;
+- Adapted the project to concurency using [pupeteer-cluster](https://github.com/thomasdondorf/puppeteer-cluster);
+- Replaced Mongodb support with a converter from JSON to SQLite (for performance reasons).
+
 ## Requirements
 
 - Nodejs
-- MongoDB (optional)
+- Python
 
 ## Usage
 
+Note that for performance reasons, no file will be written until all courses/plans are obtained. 
+
 ```bash
-git clone https://github.com/Songkeys/uCourse-crawler.git
+git clone https://github.com/EricWay1024/uCourse-crawler
 cd uCourse-crawler
 npm i
-npm start
+pip3 install pandas numpy
 ```
 
-## Demo
+Launch the course scraper:
 
-![demo](https://ae01.alicdn.com/kf/U8dea349724724abaa24cabb4cfa83b27y.jpg)
+```bash
+node course.js
+```
 
-## Output Methods
+(This will save result to `./dist/courseData.json`.)
 
-There are two output methods provided:
+Launch the plan scraper:
 
-1. MongoDB (Recommended)
-2. Local JSON file
+```bash
+node plan.js
+```
 
-### Output (MongoDB)
+(This will save result to `./dist/planData.json`. Also, a file `./dist/plans.json` containing all possible plan UCAS codes will be created in the process.)
 
-For mongoDB, you will need to input a mongo [connection string URI](https://docs.mongodb.com/manual/reference/connection-string/). The output will be stored in a table called `course_[campus]_[year]`. E.g. `course_china_2020`.
+Convert to SQLite:
 
-The output example:
+```bash
+python3 find_deg.py
+python3 to_sqlite.py
+```
 
-![output-mongodb](https://ae01.alicdn.com/kf/U0b38637fccbf47e9a92d1966005711d9T.jpg)
+(This will infer the degree type of all plans and add to plan objects. Then the data is saved to `./dist/data.db`.)
 
 ### Output (JSON file)
 
@@ -42,19 +62,15 @@ The output example:
 
 ![output-json](https://ae01.alicdn.com/kf/Ue83678fcf72e4906846dad02c87c00f06.jpg)
 
-## Size & Time
+## Size
 
-The estimated output size will be 2~3 MB per campus per year.
-
-The estimated crawling time will be 30~50 mins per campus per year (depending on your network). 
+The estimated output size will be 50~60 MB if both courses and plans are crawled for a campus a year.
 
 ## Todo
 
-- [ ] Concurency using [pupeteer-cluster](https://github.com/thomasdondorf/puppeteer-cluster)
-- [ ] Breakpoint resume
+
 
 ## Resources
 
 - Resouce website: <https://mynottingham.nottingham.ac.uk/psp/psprd/EMPLOYEE/HRMS/c/UN_PROG_AND_MOD_EXTRACT.UN_PAM_CRSE_EXTRCT.GBL>
-  - There is also a short url for this: <https://u.nu/course>. (You may need to visit twice to open it for some authorization issue.)
 
