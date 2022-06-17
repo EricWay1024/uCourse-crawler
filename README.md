@@ -25,6 +25,7 @@ Note that for performance reasons, no file will be written until all courses/pla
 ```bash
 git clone https://github.com/EricWay1024/uCourse-crawler
 cd uCourse-crawler
+mkdir dist
 npm i
 pip3 install pandas numpy
 ```
