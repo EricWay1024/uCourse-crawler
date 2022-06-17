@@ -30,6 +30,13 @@ npm i
 pip3 install pandas numpy
 ```
 
+Set your university user name and password:
+```bash
+echo USER_ID="your_user_id"\nUSER_PASSWORD="your_password" > .env
+```
+
+Note that although all information on the resource website can be accessed without logging in, it now occasionally requires authentification. Please ensure the safety of your password.
+
 Launch the course scraper:
 
 ```bash
