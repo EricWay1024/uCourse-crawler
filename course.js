@@ -311,8 +311,8 @@ const main = async () => {
     const json = JSON.stringify(results, null, 2);
     // add time stamp to file name
     const timeStamp = new Date().toISOString().replace(/:/g, "-");
-    fs.writeFileSync(`./dist/courseData-${timeStamp}.json`, json);
-    fs.writeFileSync(`./dist/courseData.json`, json);
+    fs.writeFileSync(`./dist/courseData-${CONFIGS.campus_code}-${timeStamp}.json`, json);
+    fs.writeFileSync(`./dist/courseData-${CONFIGS.campus_code}.json`, json);
 
     await browser.close();
     consola.success("All done! 👍👍👍");

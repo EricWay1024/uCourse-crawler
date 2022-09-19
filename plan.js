@@ -1,5 +1,6 @@
 const puppeteer = require("puppeteer");
-const consola = require("consola");
+// const consola = require("consola");
+const progressBar = require("progress-bar-cli");
 const prompts = require("prompts");
 const fs = require("fs-extra");
 const { Cluster } = require('puppeteer-cluster');
@@ -11,7 +12,7 @@ const CONFIGS = {
   year: undefined,
   year_code: undefined,
   browser: {
-    headless: true,
+    headless: false,
     // slowMo: 50,
     args: ["–disable-gpu", "–single-process", "–no-sandbox", "–no-zygote"],
   },
@@ -115,7 +116,7 @@ const searchCode = async (page, keyword, retries = 10) => {
     await page.$eval('#UN_PAM_EXTR_WRK_DESCR5_1', (el, v) => el.value = v, keyword);
     await new Promise(r => setTimeout(r, 1000));
     await page.click('#UN_PAM_EXTR_WRK_SEARCH');
-    await page.waitForSelector('[id="win0divUN_PAM_PLAN_VW$0"]');
+    await page.waitForSelector('[id="UN_PAM_EXTR_WRK_RETURN_PB"]');
   } catch (e) {
     if (retries === 0) {
       throw e;
@@ -408,6 +409,9 @@ const getPlansForCode = async (page, planCode) => {
   await page.reload();
   await preSearch(page);
 
+  const maxTrial = plans.length * 20;
+  const trialCnt = 0;
+
   for (let j = 0; j < plans.length; j++) {
     await searchCode(page, planCode);
 
@@ -425,6 +429,10 @@ const getPlansForCode = async (page, planCode) => {
     } 
     
     catch (e) {
+      trialCnt += 1;
+      if (trialCnt > maxTrial) {
+        throw new Error('Too many trials');
+      }
       j--;
       await page.reload();
       await preSearch(page);
@@ -442,8 +450,19 @@ const generatePlanList = async () => {
   await init(page);
   const alphaNum = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
   let plans = [];
+  let startTime = new Date();
   for (let i = 0; i < alphaNum.length; i++) {
+    progressBar.progressBar(i, alphaNum.length, startTime);
     await searchCode(page, alphaNum[i]);
+
+    const noResult = await page.evaluate(() => {
+      return document.documentElement.innerHTML.match(
+        /No details have been found for this search/g
+      );
+    });
+    if (noResult) {
+      continue;
+    }
 
     while (true) {
       const plansInPage = await page.evaluate(() => {
@@ -472,7 +491,7 @@ const generatePlanList = async () => {
   }
 
   // save plans to json
-  fs.writeFileSync("./dist/plans.json", JSON.stringify(plans));
+  fs.writeFileSync(`./dist/plans-${CONFIGS.campus_code}.json`, JSON.stringify(plans));
   browser.close();
 }
 
@@ -483,10 +502,10 @@ const main = async () => {
   // read plans from json
   let planCodeList;
   try {
-    planCodeList = JSON.parse(fs.readFileSync("./dist/plans.json"));
+    planCodeList = JSON.parse(fs.readFileSync(`./dist/plans-${CONFIGS.campus_code}.json`));
   } catch(e) {
     await generatePlanList();
-    planCodeList = JSON.parse(fs.readFileSync("./dist/plans.json"));
+    planCodeList = JSON.parse(fs.readFileSync(`./dist/plans-${CONFIGS.campus_code}.json`));
   }
 
   const numOfConcurrent = 15;
@@ -509,6 +528,8 @@ const main = async () => {
     retryLimit: 10,
   });
 
+  let startTime = new Date();
+
   await cluster.task(async ({ page, data }) => {
     const { conNum } = data;
     const currentPlanCodeList = planCodeListPerConcurrent[conNum];
@@ -521,10 +542,12 @@ const main = async () => {
         try {
           const results = await getPlansForCode(page, planCode);
           currentResults.push(...results);
-          cnt += results.length;
-          console.log(`> Finished ${cnt} plans.`);
+
+          progressBar.progressBar(cnt, planCodeList.length, startTime);
+          cnt += 1;
         } catch (e) {
-          console.error(`Error for plan code ${planCode}`, e);
+          console.error(planCode);
+          console.error(e);
           continue;
         }
     }
@@ -546,9 +569,8 @@ const main = async () => {
   const json = JSON.stringify(allResults, null, 2);
   // add time stamp to file name
   const timeStamp = new Date().toISOString().replace(/:/g, "-");
-  fs.writeFileSync(`./dist/planData-${timeStamp}.json`, json);
-  fs.writeFileSync(`./dist/planData.json`, json);
+  fs.writeFileSync(`./dist/planData-${CONFIGS.campus_code}-${timeStamp}.json`, json);
+  fs.writeFileSync(`./dist/planData-${CONFIGS.campus_code}.json`, json);
 };
-
 
 main();

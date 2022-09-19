@@ -62,14 +62,6 @@ python3 to_sqlite.py
 
 (This will infer the degree type of all plans and add to plan objects. Then the data is saved to `./dist/data.db`.)
 
-### Output (JSON file)
-
-For local JSON file, the output will be in a JSON format stored in `/dist/[tablename].json`. 
-
-The output example:
-
-![output-json](https://ae01.alicdn.com/kf/Ue83678fcf72e4906846dad02c87c00f06.jpg)
-
 ## Size
 
 The estimated output size will be 50~60 MB if both courses and plans are crawled for a campus a year.

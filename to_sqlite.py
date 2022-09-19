@@ -1,8 +1,12 @@
 import numpy as np
 import pandas
 import json
+import os
 
-def json_to_sqlite(json_file, table_name, obj_cols, num_cols=[]):
+os.remove("dist/data.db")
+
+
+def json_to_sqlite(json_file, table_name, campus, obj_cols, num_cols=[]):
     """
     Converts a json file to a sqlite database.
     """
@@ -11,7 +15,8 @@ def json_to_sqlite(json_file, table_name, obj_cols, num_cols=[]):
         data[col] = data[col].apply(json.dumps)
     for col in num_cols:
         data[col] = data[col].apply(lambda x: "NAN" if np.isnan(x) else str(int(x)))
-    data.to_sql(table_name, con='sqlite:///dist/data.db', if_exists='replace', index_label='id')
+    data['campus'] = campus
+    data.to_sql(table_name, con=f'sqlite:///dist/data.db', if_exists='append', index_label='id')
 
 course_obj_cols = [
     "convenor",
@@ -37,17 +42,20 @@ plan_obj_cols = [
     "degreeCalculationModel",
 ]
 
-json_to_sqlite(
-    './dist/courseData.json',
-    'course',
-    course_obj_cols,
-    course_num_cols
-)
+for campus in "CMU":
+    json_to_sqlite(
+        f'./dist/courseData-{campus}.json',
+        f'course',
+        campus,
+        course_obj_cols,
+        course_num_cols
+    )
 
-json_to_sqlite(
-    './dist/planData.json',
-    'plan',
-    plan_obj_cols
-)
+    json_to_sqlite(
+        f'./dist/planData-{campus}.json',
+        f'plan',
+        campus,
+        plan_obj_cols
+    )
 
 
