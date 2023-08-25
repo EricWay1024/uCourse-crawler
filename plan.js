@@ -12,7 +12,7 @@ const CONFIGS = {
   year: undefined,
   year_code: undefined,
   browser: {
-    headless: false,
+    headless: true,
     // slowMo: 50,
     args: ["–disable-gpu", "–single-process", "–no-sandbox", "–no-zygote"],
   },

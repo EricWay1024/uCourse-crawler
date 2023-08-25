@@ -3,7 +3,10 @@ import pandas
 import json
 import os
 
-os.remove("dist/data.db")
+try:
+    os.remove("dist/data.db")
+except FileNotFoundError:
+    pass
 
 
 def json_to_sqlite(json_file, table_name, campus, obj_cols, num_cols=[]):
